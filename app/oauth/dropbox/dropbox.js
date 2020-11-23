@@ -1,10 +1,7 @@
 var express = require('express');
 var router = express.Router();
-var {google} = require('googleapis');
-var mime = require('mime');
 var stream = require("stream");
-
-const SCOPES = ['https://www.googleapis.com/auth/drive'];
+var dropboxV2Api = require('dropbox-v2-api');
 
 router.use('/', (req, res) => {
     validateRequest(req.body, (validBody) => {
@@ -40,40 +37,31 @@ function fileUpload(body, callback)
         {
             try
             {
-                const oAuth2Client = new google.auth.OAuth2(body.clientId, body.clientSecret, body.callbackURL);
-                oAuth2Client.getToken(body.token, (err, token) => {
-                    oAuth2Client.setCredentials(token);
-                    const drive = google.drive({version: 'v3'});
-
-                    const buf = new Buffer.from(body.fileData, "base64");
-                    const bs = new stream.PassThrough();
-                    bs.end(buf);
-
-                    var fileMetadata = {
-                        'name': body.fileName,
-                    };
-                    var media = {
-                        mimeType: mime.lookup(body.fileName),
-                        body: bs
-                    };
-                    drive.files.create({
-                        auth: oAuth2Client,
-                        resource: fileMetadata,
-                        media: media,
-                        fields: 'id'
-                    }, function (err, file) {
-                    if (err) {
-                        // Handle error
-                        console.error(err);
-                        validBody.code = 400;
-                        validBody.message.push(err.toString());
-                        callback(validBody);
-                    } else {
-                        console.log('File Id:', file.id);
-                        validBody.message.push('File has been uploaded successfully');
-                        callback(validBody);
+                const dropbox = dropboxV2Api.authenticate({
+                    client_id: body.clientId,
+                    client_secret: body.clientSecret,
+                    redirect_uri: body.callbackURL,
+                });
+                dropbox.getToken(body.token, async (err, result, response) => {
+                    if(!err) 
+                    {
+                        const buf = new Buffer.from(body.fileData, "base64");
+                        const bs = new stream.PassThrough();
+                        bs.end(buf);
+                        dropbox({
+                            resource: 'files/upload',
+                            parameters: {
+                                path: body.fileName
+                            },
+                            readStream: bs
+                        }, (err, result, response) => {
+                            callback({code:200, message:['file uploaded']});
+                        });
                     }
-                    });
+                    else
+                    {
+                        callback({code:400, message: [err]});
+                    }
                 });
             }
             catch(e)
@@ -98,12 +86,12 @@ function generateAuthUrl(body, callback)
     };
     try
     {
-        const oAuth2Client = new google.auth.OAuth2(body.clientId, body.clientSecret, body.callbackURL);
-        const authUrl = oAuth2Client.generateAuthUrl({
-            access_type: 'offline',
-            scope: SCOPES,
+        const dropbox = dropboxV2Api.authenticate({
+            client_id: body.clientId,
+            client_secret: body.clientSecret,
+            redirect_uri: body.callbackURL,
         });
-
+        const authUrl = dropbox.generateAuthUrl();
         response.message.push('Authentication URL generated');
         response.authenticationUrl = authUrl;
     }

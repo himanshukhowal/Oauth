@@ -1,6 +1,5 @@
 var express = require('express');
 var router = express.Router();
-var fs = require('fs');
 var mime = require('mime');
 var request = require('request');
 
@@ -22,7 +21,7 @@ router.post('/authenticate', (req, res) => {
     })
 })
 
-router.post('/fileUpload', (req, res) => {
+router.post('/uploadFile', (req, res) => {
     uploadFile(req.body, (uploadedPayload) => {
         if(uploadedPayload.code != 200)
             res.status(uploadedPayload.code).json(uploadedPayload);
@@ -45,19 +44,20 @@ function uploadFile(body, callback)
                 grant_type: 'authorization_code'
             },
         }, function(error, response, responseBody) {
-
             const buf = new Buffer.from(body.fileData, "base64");
-
             request.put({
-                url: 'https://graph.microsoft.com/v1.0/drive/root:/test/' + body.fileName + ':/content',
+                url: 'https://graph.microsoft.com/v1.0/drive/root:' + body.fileName + ':/content',
                 headers: {
                     'Authorization': "Bearer " + JSON.parse(responseBody).access_token,
                     'Content-Type': mime.lookup(body.fileName),
                 },
                 body: buf,
             }, function(er, re, bo) {
-                console.log(bo);
-                callback({code:200, message: [JSON.parse(bo)]});
+                let driveResponse = JSON.parse(bo);
+                if(driveResponse.error)
+                    callback({code:400, message: [JSON.parse(bo)]});
+                else
+                    callback({code:200, message: [JSON.parse(bo)]});
             });
         });
     });
