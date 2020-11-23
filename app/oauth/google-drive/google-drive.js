@@ -1,7 +1,7 @@
 var express = require('express');
 var router = express.Router();
-const fs = require('fs');
 const {google} = require('googleapis');
+var mime = require('mime');
 const stream = require("stream");
 
 const SCOPES = ['https://www.googleapis.com/auth/drive'];
@@ -53,7 +53,7 @@ function fileUpload(body, callback)
                         'name': body.fileName,
                     };
                     var media = {
-                        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        mimeType: mime.lookup(body.fileName),
                         body: bs
                     };
                     drive.files.create({
